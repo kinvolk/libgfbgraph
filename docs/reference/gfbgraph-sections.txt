@@ -162,6 +162,9 @@ gfbgraph_user_get_me_async_finish
 gfbgraph_user_get_albums
 gfbgraph_user_get_albums_async
 gfbgraph_user_get_albums_async_finish
+gfbgraph_user_get_friends
+gfbgraph_user_get_friends_async
+gfbgraph_user_get_friends_async_finish
 gfbgraph_user_get_name
 <SUBSECTION Standard>
 GFBGRAPH_IS_USER

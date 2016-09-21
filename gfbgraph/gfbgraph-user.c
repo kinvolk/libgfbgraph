@@ -32,6 +32,7 @@
 #include "gfbgraph-user.h"
 #include "gfbgraph-album.h"
 #include "gfbgraph-common.h"
+#include "gfbgraph-connectable.h"
 
 #define ME_FUNCTION "me"
 
@@ -65,12 +66,14 @@ static void gfbgraph_user_async_data_free (GFBGraphUserAsyncData *data);
 static void gfbgraph_user_connection_async_data_free (GFBGraphUserConnectionAsyncData *data);
 static void gfbgraph_user_get_me_async_thread (GSimpleAsyncResult *simple_async, GFBGraphAuthorizer *authorizer, GCancellable cancellable);
 static void gfbgraph_user_get_albums_async_thread (GSimpleAsyncResult *simple_async, GFBGraphUser *user, GCancellable cancellable);
-
+static void gfbgraph_user_get_friends_async_thread (GSimpleAsyncResult *simple_async, GFBGraphUser *user, GCancellable cancellable);
+static void gfbgraph_user_connectable_iface_init (GFBGraphConnectableInterface *iface);
 #define GFBGRAPH_USER_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE((o), GFBGRAPH_TYPE_USER, GFBGraphUserPrivate))
 
 static GFBGraphNodeClass *parent_class = NULL;
 
-G_DEFINE_TYPE (GFBGraphUser, gfbgraph_user, GFBGRAPH_TYPE_NODE);
+G_DEFINE_TYPE_WITH_CODE (GFBGraphUser, gfbgraph_user, GFBGRAPH_TYPE_NODE,
+                         G_IMPLEMENT_INTERFACE (GFBGRAPH_TYPE_CONNECTABLE, gfbgraph_user_connectable_iface_init));
 
 static void
 gfbgraph_user_init (GFBGraphUser *obj)
@@ -185,6 +188,20 @@ gfbgraph_user_get_albums_async_thread (GSimpleAsyncResult *simple_async, GFBGrap
 
         error = NULL;
         data->nodes = gfbgraph_user_get_albums (user, data->authorizer, &error);
+        if (error != NULL)
+                g_simple_async_result_take_error (simple_async, error);
+}
+
+static void
+gfbgraph_user_get_friends_async_thread (GSimpleAsyncResult *simple_async, GFBGraphUser *user, GCancellable cancellable)
+{
+        GFBGraphUserConnectionAsyncData *data;
+        GError *error;
+
+        data = (GFBGraphUserConnectionAsyncData *) g_simple_async_result_get_op_res_gpointer (simple_async);
+
+        error = NULL;
+        data->nodes = gfbgraph_user_get_friends (user, data->authorizer, &error);
         if (error != NULL)
                 g_simple_async_result_take_error (simple_async, error);
 }
@@ -403,6 +420,117 @@ gfbgraph_user_get_albums_async_finish (GFBGraphUser *user, GAsyncResult *result,
 
         g_return_val_if_fail (GFBGRAPH_IS_USER (user), NULL);
         g_return_val_if_fail (g_simple_async_result_is_valid (result, G_OBJECT (user), gfbgraph_user_get_albums_async), NULL);
+        g_return_val_if_fail (error == NULL || *error == NULL, NULL);
+
+        simple_async = G_SIMPLE_ASYNC_RESULT (result);
+
+        if (g_simple_async_result_propagate_error (simple_async, error))
+                return NULL;
+
+        data = (GFBGraphUserConnectionAsyncData *) g_simple_async_result_get_op_res_gpointer (simple_async);
+        return data->nodes;
+}
+
+static GHashTable*
+gfbgraph_user_get_connection_post_params (GFBGraphConnectable *self, GType node_type)
+{
+        return g_hash_table_new (g_str_hash, g_str_equal);
+}
+
+static void
+gfbgraph_user_connectable_iface_init (GFBGraphConnectableInterface *iface)
+{
+        GHashTable *connections;
+
+        connections = g_hash_table_new (g_str_hash, g_str_equal);
+        g_hash_table_insert (connections, (gpointer) g_type_name (GFBGRAPH_TYPE_USER), (gpointer) "friends");
+
+        iface->connections = connections;
+        iface->get_connection_post_params = gfbgraph_user_get_connection_post_params;
+        iface->parse_connected_data = gfbgraph_connectable_default_parse_connected_data;
+}
+
+/**
+ * gfbgraph_user_get_friends:
+ * @user: a #GFBGraphUser.
+ * @authorizer: a #GFBGraphAuthorizer.
+ * @error: (allow-none): An optional #GError, or %NULL.
+ *
+ * Retrieve friends of the @user. This function calls the function
+ * ID/friends.
+ *
+ * Returns: (element-type GFBGraphUser) (transfer full): a
+ * newly-allocated #GList with friends owned by the given user.
+ **/
+GList*
+gfbgraph_user_get_friends (GFBGraphUser *user, GFBGraphAuthorizer *authorizer, GError **error)
+{
+        g_return_val_if_fail (GFBGRAPH_IS_USER (user), NULL);
+        g_return_val_if_fail (GFBGRAPH_IS_AUTHORIZER (authorizer), NULL);
+
+        return gfbgraph_node_get_connection_nodes (GFBGRAPH_NODE (user), GFBGRAPH_TYPE_USER, authorizer, error);
+}
+
+/**
+ * gfbgraph_user_get_friends_async:
+ * @user: a #GFBGraphUser.
+ * @authorizer: a #GFBGraphAuthorizer.
+ * @cancellable: (allow-none): An optional #GCancellable object, or %NULL.
+ * @callback: (scope async): A #GAsyncReadyCallback to call when the request is completed.
+ * @user_data: (closure): The data to pass to @callback.
+ *
+ * Asynchronously retrieve friends of the @user. See
+ * gfbgraph_user_get_friends() for the synchronous version of this
+ * call.
+ *
+ * When the operation is finished, @callback will be called. You can
+ * then call gfbgraph_user_get_friends_async_finish() to get the
+ * #GList of #GFBGraphUser owned by the @user.
+ **/
+void
+gfbgraph_user_get_friends_async (GFBGraphUser *user, GFBGraphAuthorizer *authorizer, GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data)
+{
+        GSimpleAsyncResult *simple_async;
+        GFBGraphUserConnectionAsyncData *data;
+
+        g_return_if_fail (GFBGRAPH_IS_USER (user));
+        g_return_if_fail (GFBGRAPH_IS_AUTHORIZER (authorizer));
+        g_return_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable));
+        g_return_if_fail (callback != NULL);
+
+        simple_async = g_simple_async_result_new (G_OBJECT (user), callback, user_data, gfbgraph_user_get_friends_async);
+        g_simple_async_result_set_check_cancellable (simple_async, cancellable);
+
+        data = g_slice_new (GFBGraphUserConnectionAsyncData);
+        data->nodes = NULL;
+        data->authorizer = authorizer;
+        g_object_ref (data->authorizer);
+
+        g_simple_async_result_set_op_res_gpointer (simple_async, data, (GDestroyNotify) gfbgraph_user_connection_async_data_free);
+        g_simple_async_result_run_in_thread (simple_async, (GSimpleAsyncThreadFunc) gfbgraph_user_get_friends_async_thread, G_PRIORITY_DEFAULT, cancellable);
+
+        g_object_unref (simple_async);
+}
+
+/**
+ * gfbgraph_user_get_friends_async_finish:
+ * @user: a #GFBGraphUser.
+ * @result: A #GAsyncResult.
+ * @error: (allow-none): An optional #GError, or %NULL.
+ *
+ * Finishes an asynchronous operation started with
+ * gfbgraph_user_get_friends_async().
+ *
+ * Returns: (element-type GFBGraphUser) (transfer full): a newly-allocated #GList of friends owned by the @user.
+ **/
+GList*
+gfbgraph_user_get_friends_async_finish (GFBGraphUser *user, GAsyncResult *result, GError **error)
+{
+        GSimpleAsyncResult *simple_async;
+        GFBGraphUserConnectionAsyncData *data;
+
+        g_return_val_if_fail (GFBGRAPH_IS_USER (user), NULL);
+        g_return_val_if_fail (g_simple_async_result_is_valid (result, G_OBJECT (user), gfbgraph_user_get_friends_async), NULL);
         g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
         simple_async = G_SIMPLE_ASYNC_RESULT (result);
