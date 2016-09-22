@@ -56,4 +56,6 @@ libgfbgraph.pc
 docs/Makefile
 docs/reference/Makefile
 gfbgraph/Makefile
-tests/Makefile])
+tests/Makefile
+examples/Makefile
+examples/friends/Makefile])
