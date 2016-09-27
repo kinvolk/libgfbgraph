@@ -6,7 +6,7 @@ lib_sources = \
 	gfbgraph-goa-authorizer.c	\
 	gfbgraph-node.c			\
 	gfbgraph-photo.c		\
-	gfbgraph-simple-authorizer.c    \
+	gfbgraph-simple-authorizer.c	\
 	gfbgraph-user.c
 
 lib_headers = \
@@ -18,8 +18,34 @@ lib_headers = \
 	gfbgraph-goa-authorizer.h	\
 	gfbgraph-node.h			\
 	gfbgraph-photo.h		\
-	gfbgraph-simple-authorizer.h    \
+	gfbgraph-simple-authorizer.h	\
 	gfbgraph-user.h
+
+lib_generated_headers = \
+	gfbgraph-enum-types.h
+
+lib_generated_sources = \
+	gfbgraph-enum-types.c
+
+BUILT_SOURCES = \
+	$(lib_generated_headers)	\
+	$(lib_generated_sources)
+
+EXTRA_DIST = \
+	gfbgraph-enum-types.h.template	\
+	gfbgraph-enum-types.c.template
+
+DISTCLEANFILES = \
+	$(lib_generated_headers)	\
+	$(lib_generated_sources)
+
+gfbgraph-enum-types.h: $(lib_headers) gfbgraph-enum-types.h.template
+	$(AM_V_GEN) $(GLIB_MKENUMS) --identifier-prefix GFBGraph --template $(filter %.template,$^) $(filter-out %.template,$^) > \
+	    gfbgraph-enum-types.h.tmp && mv gfbgraph-enum-types.h.tmp gfbgraph-enum-types.h
+
+gfbgraph-enum-types.c: $(lib_headers) gfbgraph-enum-types.c.template
+	$(AM_V_GEN) $(GLIB_MKENUMS) --identifier-prefix GFBGraph --template $(filter %.template,$^) $(filter-out %.template,$^) > \
+	    gfbgraph-enum-types.c.tmp && mv gfbgraph-enum-types.c.tmp gfbgraph-enum-types.c
 
 lib_LTLIBRARIES = libgfbgraph-@API_VERSION@.la
 
@@ -38,9 +64,9 @@ libgfbgraph_@API_VERSION@_la_LIBADD = \
 	$(SOUP_LIBS)		\
 	$(GOA_LIBS)
 
-libgfbgraph_@API_VERSION@_la_SOURCES = $(lib_sources) $(lib_headers)
+libgfbgraph_@API_VERSION@_la_SOURCES = $(lib_sources) $(lib_headers) $(lib_generated_sources) $(lib_generated_headers)
 
-libgfbgraph_@API_VERSION@_la_HEADERS = $(lib_headers)
+libgfbgraph_@API_VERSION@_la_HEADERS = $(lib_headers) $(lib_generated_headers)
 
 libgfbgraph_@API_VERSION@_ladir = $(includedir)/gfbgraph-@API_VERSION@/gfbgraph
 
@@ -73,7 +99,7 @@ GFBGraph_@API_MAJOR@_@API_MINOR@_gir_CFLAGS = \
 	-I$(top_srcdir)
 
 GFBGraph_@API_MAJOR@_@API_MINOR@_gir_LIBS = libgfbgraph-@API_VERSION@.la
-GFBGraph_@API_MAJOR@_@API_MINOR@_gir_FILES = $(lib_sources) $(lib_headers)
+GFBGraph_@API_MAJOR@_@API_MINOR@_gir_FILES = $(lib_sources) $(lib_headers) $(lib_generated_sources) $(lib_generated_headers)
 GFBGraph_@API_MAJOR@_@API_MINOR@_gir_NAMESPACE = GFBGraph
 GFBGraph_@API_MAJOR@_@API_MINOR@_gir_EXPORT_PACKAGES = libgfbgraph.@API_VERSION@
 GFBGraph_@API_MAJOR@_@API_MINOR@_gir_SCANNERFLAGS = \

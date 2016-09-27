@@ -50,8 +50,8 @@ struct _GFBGraphNodeClass {
 };
 
 typedef enum {
-        GFBGRAPH_NODE_ERROR_NO_CONNECTIONABLE = 1,
-        GFBGRAPH_NODE_ERROR_NO_CONNECTABLE
+        GFBGRAPH_NODE_ERROR_NO_CONNECTIONABLE = 1, /*< nick=no-connectionable >*/
+        GFBGRAPH_NODE_ERROR_NO_CONNECTABLE         /*< nick=no-connectable >*/
 } GFBGraphNodeError;
 
 GType          gfbgraph_node_get_type    (void) G_GNUC_CONST;
