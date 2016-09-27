@@ -36,6 +36,45 @@ photo_async_cb (GFBGraphNode *album_node, GAsyncResult *res, GFBGraphAuthorizer 
 }
 
 void
+friends_async_cb (GFBGraphUser *me_node, GAsyncResult *res, GFBGraphAuthorizer *authorizer)
+{
+  GError *error = NULL;
+  GList *friends = gfbgraph_user_get_friends_async_finish (me_node, res, &error);
+  GList *iter;
+
+  if (error != NULL)
+    {
+      g_print("Error: %s\n", error->message);
+      g_main_loop_quit (main_loop);
+      return;
+    }
+
+  for (iter = friends; iter != NULL; iter = iter->next)
+    {
+      g_print ("%s\n", gfbgraph_user_get_name (iter->data));
+    }
+  g_list_free_full (friends, g_object_unref);
+  g_main_loop_quit (main_loop);
+}
+
+void
+picture_async_cb (GFBGraphUser *me_node, GAsyncResult *res, GFBGraphAuthorizer *authorizer)
+{
+  GError *error = NULL;
+  GBytes *raw = gfbgraph_user_get_picture_async_finish (me_node, res, &error);
+
+  if (error != NULL)
+    {
+      g_print("Error: %s\n", error->message);
+      g_main_loop_quit (main_loop);
+      return;
+    }
+
+  g_bytes_unref (raw);
+  gfbgraph_user_get_friends_async (me_node, authorizer, NULL, (GAsyncReadyCallback) friends_async_cb, authorizer);
+}
+
+void
 albums_async_cb (GFBGraphNode *me_node, GAsyncResult *res, GFBGraphAuthorizer *authorizer)
 {
         GList *albums;
@@ -47,6 +86,7 @@ albums_async_cb (GFBGraphNode *me_node, GAsyncResult *res, GFBGraphAuthorizer *a
         if (error != NULL) {
                 g_print ("Error: %s\n", error->message);
                 g_main_loop_quit (main_loop);
+		return;
         }
 
         /* Print all albums names and count */
@@ -72,7 +112,9 @@ albums_async_cb (GFBGraphNode *me_node, GAsyncResult *res, GFBGraphAuthorizer *a
         if (one_album != NULL) {
                 gfbgraph_node_get_connection_nodes_async (GFBGRAPH_NODE (one_album), GFBGRAPH_TYPE_PHOTO, authorizer,
                                                           NULL, (GAsyncReadyCallback) photo_async_cb, authorizer);
-        }
+        } else {
+	  gfbgraph_user_get_picture_async (GFBGRAPH_USER (me_node), authorizer, GFBGRAPH_PICTURE_SMALL, NULL, (GAsyncReadyCallback) picture_async_cb, authorizer);
+	}
 
         g_list_free (albums);
 }
