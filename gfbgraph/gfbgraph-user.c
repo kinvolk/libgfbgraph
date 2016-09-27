@@ -55,6 +55,11 @@ typedef struct {
         GList *nodes;
 } GFBGraphUserConnectionAsyncData;
 
+typedef struct {
+        GFBGraphAuthorizer *authorizer;
+        GBytes *picture;
+} GFBGraphUserPictureAsyncData;
+
 static void gfbgraph_user_init         (GFBGraphUser *obj);
 static void gfbgraph_user_class_init   (GFBGraphUserClass *klass);
 static void gfbgraph_user_finalize     (GObject *obj);
@@ -64,9 +69,11 @@ static void gfbgraph_user_get_property (GObject *object, guint prop_id, GValue *
 /* Private functions */
 static void gfbgraph_user_async_data_free (GFBGraphUserAsyncData *data);
 static void gfbgraph_user_connection_async_data_free (GFBGraphUserConnectionAsyncData *data);
+static void gfbgraph_user_picture_async_data_free (GFBGraphUserPictureAsyncData *data);
 static void gfbgraph_user_get_me_async_thread (GSimpleAsyncResult *simple_async, GFBGraphAuthorizer *authorizer, GCancellable cancellable);
 static void gfbgraph_user_get_albums_async_thread (GSimpleAsyncResult *simple_async, GFBGraphUser *user, GCancellable cancellable);
 static void gfbgraph_user_get_friends_async_thread (GSimpleAsyncResult *simple_async, GFBGraphUser *user, GCancellable cancellable);
+static void gfbgraph_user_get_picture_async_thread (GSimpleAsyncResult *simple_async, GFBGraphUser *user, GCancellable cancellable);
 static void gfbgraph_user_connectable_iface_init (GFBGraphConnectableInterface *iface);
 #define GFBGRAPH_USER_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE((o), GFBGRAPH_TYPE_USER, GFBGraphUserPrivate))
 
@@ -165,6 +172,17 @@ gfbgraph_user_connection_async_data_free (GFBGraphUserConnectionAsyncData *data)
 }
 
 static void
+gfbgraph_user_picture_async_data_free (GFBGraphUserPictureAsyncData *data)
+{
+        if (data->authorizer != NULL)
+                g_object_unref (data->authorizer);
+        if (data->picture != NULL)
+                g_bytes_unref (data->picture);
+
+        g_slice_free (GFBGraphUserPictureAsyncData, data);
+}
+
+static void
 gfbgraph_user_get_me_async_thread (GSimpleAsyncResult *simple_async, GFBGraphAuthorizer *authorizer, GCancellable cancellable)
 {
         GFBGraphUserAsyncData *data;
@@ -202,6 +220,20 @@ gfbgraph_user_get_friends_async_thread (GSimpleAsyncResult *simple_async, GFBGra
 
         error = NULL;
         data->nodes = gfbgraph_user_get_friends (user, data->authorizer, &error);
+        if (error != NULL)
+                g_simple_async_result_take_error (simple_async, error);
+}
+
+static void
+gfbgraph_user_get_picture_async_thread (GSimpleAsyncResult *simple_async, GFBGraphUser *user, GCancellable cancellable)
+{
+        GFBGraphUserPictureAsyncData *data;
+        GError *error;
+
+        data = (GFBGraphUserPictureAsyncData *) g_simple_async_result_get_op_res_gpointer (simple_async);
+
+        error = NULL;
+        data->picture = gfbgraph_user_get_picture (user, data->authorizer, &error);
         if (error != NULL)
                 g_simple_async_result_take_error (simple_async, error);
 }
@@ -540,6 +572,135 @@ gfbgraph_user_get_friends_async_finish (GFBGraphUser *user, GAsyncResult *result
 
         data = (GFBGraphUserConnectionAsyncData *) g_simple_async_result_get_op_res_gpointer (simple_async);
         return data->nodes;
+}
+
+/**
+ * gfbgraph_user_get_picture:
+ * @user: a #GFBGraphUser.
+ * @authorizer: a #GFBGraphAuthorizer.
+ * @error: (allow-none): An optional #GError, or %NULL.
+ *
+ * Retrieve a picture (or an avatar) of the @user. This function calls
+ * the function ID/picture?redirect=1.
+ *
+ * Returns: (transfer full): a newly-allocated #GBytes with the raw
+ * picture data (likely a JPEG data). You could use
+ * gdk_pixbuf_loader_write() to get the #GdkPixbuf out of it.
+ **/
+GBytes*
+gfbgraph_user_get_picture (GFBGraphUser *user, GFBGraphAuthorizer *authorizer, GError **error)
+{
+        RestProxyCall *rest_call;
+        gchar *function_path;
+        const gchar *payload;
+        goffset payload_len;
+
+        g_return_val_if_fail (GFBGRAPH_IS_USER (user), NULL);
+        g_return_val_if_fail (GFBGRAPH_IS_AUTHORIZER (authorizer), NULL);
+
+        rest_call = gfbgraph_new_rest_call (authorizer);
+        rest_proxy_call_set_method (rest_call, "GET");
+        function_path = g_strdup_printf ("%s/%s",
+                                         gfbgraph_node_get_id (GFBGRAPH_NODE (user)),
+                                         "picture");
+        rest_proxy_call_set_function (rest_call, function_path);
+        g_free (function_path);
+        rest_proxy_call_add_param (rest_call, "redirect", "1");
+        rest_proxy_call_add_param (rest_call, "type", "square");
+        if (!rest_proxy_call_sync (rest_call, error)) {
+                g_object_unref (rest_call);
+                return NULL;
+        }
+
+        payload = rest_proxy_call_get_payload (rest_call);
+        payload_len = rest_proxy_call_get_payload_length (rest_call);
+        /* a goffset (a signed 64bit int) for data length? meh.
+         */
+        if (payload_len < 0) {
+                g_object_unref (rest_call);
+                g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                             "negative payload length (%" G_GOFFSET_FORMAT ")",
+                             payload_len);
+                return NULL;
+        }
+
+        return g_bytes_new_with_free_func (payload, payload_len, g_object_unref, rest_call);
+}
+
+/**
+ * gfbgraph_user_get_picture_async:
+ * @user: a #GFBGraphUser.
+ * @authorizer: a #GFBGraphAuthorizer.
+ * @cancellable: (allow-none): An optional #GCancellable object, or %NULL.
+ * @callback: (scope async): A #GAsyncReadyCallback to call when the request is completed.
+ * @user_data: (closure): The data to pass to @callback.
+ *
+ * Asynchronously retrieve a picture (or an avatar) of the @user. See
+ * gfbgraph_user_get_picture() for the synchronous version of this
+ * call.
+ *
+ * When the operation is finished, @callback will be called. You can
+ * then call gfbgraph_user_get_picture_async_finish() to get the
+ * #GList of #GFBGraphUser owned by the @user.
+ **/
+void
+gfbgraph_user_get_picture_async (GFBGraphUser *user, GFBGraphAuthorizer *authorizer, GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data)
+{
+        GSimpleAsyncResult *simple_async;
+        GFBGraphUserPictureAsyncData *data;
+
+        g_return_if_fail (GFBGRAPH_IS_USER (user));
+        g_return_if_fail (GFBGRAPH_IS_AUTHORIZER (authorizer));
+        g_return_if_fail (cancellable == NULL || G_IS_CANCELLABLE (cancellable));
+        g_return_if_fail (callback != NULL);
+
+        simple_async = g_simple_async_result_new (G_OBJECT (user), callback, user_data, gfbgraph_user_get_picture_async);
+        g_simple_async_result_set_check_cancellable (simple_async, cancellable);
+
+        data = g_slice_new (GFBGraphUserPictureAsyncData);
+        data->picture = NULL;
+        data->authorizer = authorizer;
+        g_object_ref (data->authorizer);
+
+        g_simple_async_result_set_op_res_gpointer (simple_async, data, (GDestroyNotify) gfbgraph_user_picture_async_data_free);
+        g_simple_async_result_run_in_thread (simple_async, (GSimpleAsyncThreadFunc) gfbgraph_user_get_picture_async_thread, G_PRIORITY_DEFAULT, cancellable);
+
+        g_object_unref (simple_async);
+}
+
+/**
+ * gfbgraph_user_get_picture_async_finish:
+ * @user: a #GFBGraphUser.
+ * @result: A #GAsyncResult.
+ * @error: (allow-none): An optional #GError, or %NULL.
+ *
+ * Finishes an asynchronous operation started with
+ * gfbgraph_user_get_friends_async().
+ *
+ * Returns: (transfer full): a newly-allocated #GBytes with the raw
+ * picture data (likely a JPEG data). You could use
+ * gdk_pixbuf_loader_write() to get the #GdkPixbuf out of it.
+ **/
+GBytes*
+gfbgraph_user_get_picture_async_finish (GFBGraphUser *user, GAsyncResult *result, GError **error)
+{
+        GSimpleAsyncResult *simple_async;
+        GFBGraphUserPictureAsyncData *data;
+        GBytes *picture;
+
+        g_return_val_if_fail (GFBGRAPH_IS_USER (user), NULL);
+        g_return_val_if_fail (g_simple_async_result_is_valid (result, G_OBJECT (user), gfbgraph_user_get_picture_async), NULL);
+        g_return_val_if_fail (error == NULL || *error == NULL, NULL);
+
+        simple_async = G_SIMPLE_ASYNC_RESULT (result);
+
+        if (g_simple_async_result_propagate_error (simple_async, error))
+                return NULL;
+
+        data = (GFBGraphUserPictureAsyncData *) g_simple_async_result_get_op_res_gpointer (simple_async);
+        picture = data->picture;
+        data->picture = NULL;
+        return picture;
 }
 
 /**

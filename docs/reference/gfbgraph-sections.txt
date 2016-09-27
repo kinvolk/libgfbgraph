@@ -165,6 +165,9 @@ gfbgraph_user_get_albums_async_finish
 gfbgraph_user_get_friends
 gfbgraph_user_get_friends_async
 gfbgraph_user_get_friends_async_finish
+gfbgraph_user_get_picture
+gfbgraph_user_get_picture_async
+gfbgraph_user_get_picture_async_finish
 gfbgraph_user_get_name
 <SUBSECTION Standard>
 GFBGRAPH_IS_USER
