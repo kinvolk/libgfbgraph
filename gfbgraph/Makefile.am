@@ -19,7 +19,8 @@ lib_headers = \
 	gfbgraph-node.h			\
 	gfbgraph-photo.h		\
 	gfbgraph-simple-authorizer.h	\
-	gfbgraph-user.h
+	gfbgraph-user.h			\
+	gfbgraph-enums.h
 
 lib_generated_headers = \
 	gfbgraph-enum-types.h

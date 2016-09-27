@@ -24,6 +24,7 @@
 #include <glib-object.h>
 
 #include <gfbgraph/gfbgraph-node.h>
+#include <gfbgraph/gfbgraph-enums.h>
 
 G_BEGIN_DECLS
 
@@ -65,8 +66,8 @@ GList*        gfbgraph_user_get_friends              (GFBGraphUser *user, GFBGra
 void          gfbgraph_user_get_friends_async        (GFBGraphUser *user, GFBGraphAuthorizer *authorizer, GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data);
 GList*        gfbgraph_user_get_friends_async_finish (GFBGraphUser *user, GAsyncResult *result, GError **error);
 
-GBytes*       gfbgraph_user_get_picture              (GFBGraphUser *user, GFBGraphAuthorizer *authorizer, GError **error);
-void          gfbgraph_user_get_picture_async        (GFBGraphUser *user, GFBGraphAuthorizer *authorizer, GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data);
+GBytes*       gfbgraph_user_get_picture              (GFBGraphUser *user, GFBGraphAuthorizer *authorizer, GFBGraphPictureType picture_type, GError **error);
+void          gfbgraph_user_get_picture_async        (GFBGraphUser *user, GFBGraphAuthorizer *authorizer, GFBGraphPictureType picture_type, GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data);
 GBytes*       gfbgraph_user_get_picture_async_finish (GFBGraphUser *user, GAsyncResult *result, GError **error);
 
 const gchar*  gfbgraph_user_get_name (GFBGraphUser *user);
