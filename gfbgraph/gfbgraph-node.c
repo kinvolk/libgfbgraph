@@ -306,6 +306,7 @@ gfbgraph_node_new_from_id (GFBGraphAuthorizer *authorizer, const gchar *id, GTyp
                 g_object_unref (jparser);
         }
 
+        g_object_unref (rest_call);
         return node;
 }
 
@@ -424,19 +425,18 @@ gfbgraph_node_get_connection_nodes (GFBGraphNode *node, GType node_type, GFBGrap
                                          gfbgraph_connectable_get_connection_path (GFBGRAPH_CONNECTABLE (connected_node),
                                                                                       G_OBJECT_TYPE (node)));
         rest_proxy_call_set_function (rest_call, function_path);
+        g_free (function_path);
 
         if (rest_proxy_call_sync (rest_call, error)) {
                 const gchar *payload;
 
                 payload = rest_proxy_call_get_payload (rest_call);
                 nodes_list = gfbgraph_connectable_parse_connected_data (GFBGRAPH_CONNECTABLE (connected_node), payload, error);
-        } else {
-                return NULL;
         }
 
         /* We don't need this node again */
-        g_clear_object (&connected_node);
-        g_free (function_path);
+        g_object_unref (connected_node);
+        g_object_unref (rest_call);
 
 
         return nodes_list;
@@ -530,6 +530,7 @@ gfbgraph_node_append_connection (GFBGraphNode *node, GFBGraphNode *connect_node,
         RestProxyCall *rest_call;
         GHashTable *params;
         gchar *function_path;
+        gboolean success;
 
         g_return_val_if_fail (GFBGRAPH_IS_NODE (node), FALSE);
         g_return_val_if_fail (GFBGRAPH_IS_NODE (connect_node), FALSE);
@@ -538,6 +539,7 @@ gfbgraph_node_append_connection (GFBGraphNode *node, GFBGraphNode *connect_node,
 
         priv = GFBGRAPH_NODE_GET_PRIVATE (node);
 
+        success = FALSE;
         rest_call = gfbgraph_new_rest_call (authorizer);
         rest_proxy_call_set_method (rest_call, "POST");
         function_path = g_strdup_printf ("%s/%s",
@@ -545,6 +547,7 @@ gfbgraph_node_append_connection (GFBGraphNode *node, GFBGraphNode *connect_node,
                                          gfbgraph_connectable_get_connection_path (GFBGRAPH_CONNECTABLE (connect_node),
                                                                                    G_OBJECT_TYPE (node)));
         rest_proxy_call_set_function (rest_call, function_path);
+        g_free (function_path);
 
         params = gfbgraph_connectable_get_connection_post_params (GFBGRAPH_CONNECTABLE (connect_node), G_OBJECT_TYPE (node));
         if (g_hash_table_size (params) > 0) {
@@ -562,12 +565,10 @@ gfbgraph_node_append_connection (GFBGraphNode *node, GFBGraphNode *connect_node,
                 const gchar *payload;
 
                 payload = rest_proxy_call_get_payload (rest_call);
+                success = TRUE;
                 /* TODO: Parse result (the ID) and put to the connect_node */
-        } else {
-                return FALSE;
         }
+        g_object_unref (rest_call);
 
-        g_free (function_path);
-
-        return TRUE;
+        return success;
 }
